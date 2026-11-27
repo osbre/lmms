@@ -259,6 +259,8 @@ jobs:
         run: |
           cd build/tests
           ctest --output-on-failure -j3
+      - name: Check for std::pmr usage
+        run: cmake/apple/check-pmr.sh build
       - name: Package
         run: |
           cmake --build build --target package
