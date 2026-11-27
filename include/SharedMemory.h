@@ -27,10 +27,11 @@
 #define LMMS_SHARED_MEMORY_H
 
 #include <memory>
-#include <memory_resource>
 #include <new>
 #include <string>
 #include <type_traits>
+
+#include "MemoryResource.h"
 
 
 namespace lmms
@@ -80,7 +81,7 @@ private:
 
 
 //! Similar to std::pmr::monotonic_buffer_resource, but the initial buffer can be replaced
-class SharedMemoryResource final : public std::pmr::memory_resource
+class SharedMemoryResource final : public MemoryResource
 {
 public:
 	SharedMemoryResource() = default;
@@ -129,7 +130,7 @@ private:
 		return p;
 	}
 	void do_deallocate(void*, std::size_t, std::size_t) override {} // no-op
-	bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override
+	bool do_is_equal(const MemoryResource& other) const noexcept override
 	{
 		return this == &other;
 	}

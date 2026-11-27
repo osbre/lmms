@@ -26,12 +26,12 @@
 #define LMMS_AUDIO_BUFFER_H
 
 #include <bitset>
-#include <memory_resource>
 #include <vector>
 
 #include "AudioBufferView.h"
 #include "ArrayVector.h"
 #include "LmmsTypes.h"
+#include "MemoryResource.h"
 #include "lmms_constants.h"
 #include "lmms_export.h"
 
@@ -141,7 +141,7 @@ public:
 	 * @param resource memory resource for all buffers
 	 */
 	explicit AudioBuffer(f_cnt_t frames, ch_cnt_t channels = DEFAULT_CHANNELS,
-		std::pmr::memory_resource* resource = std::pmr::get_default_resource());
+		MemoryResource* resource = newDeleteResource());
 
 	/**
 	 * Creates AudioBuffer with groups defined.
@@ -156,7 +156,7 @@ public:
 	 */
 	template<class F>
 	AudioBuffer(f_cnt_t frames, ch_cnt_t channels, group_cnt_t groups,
-		std::pmr::memory_resource* resource, F&& groupVisitor)
+		MemoryResource* resource, F&& groupVisitor)
 		: AudioBuffer{frames, channels, resource}
 	{
 		setGroups(groups, std::forward<F>(groupVisitor));
@@ -385,21 +385,21 @@ private:
 	 *
 	 * [channel index]
 	 */
-	std::pmr::vector<float> m_sourceBuffer;
+	PmrVector<float> m_sourceBuffer;
 
 	/**
 	 * Provides access to individual channel buffers within the source buffer.
 	 *
 	 * [channel index][frame index]
 	 */
-	std::pmr::vector<float*> m_accessBuffer;
+	PmrVector<float*> m_accessBuffer;
 
 	/**
 	 * Interleaved scratch buffer for conversions between interleaved and planar.
 	 *
 	 * TODO: Remove once using planar only
 	 */
-	std::pmr::vector<float> m_interleavedBuffer;
+	PmrVector<float> m_interleavedBuffer;
 
 	//! Divides channels into arbitrary groups
 	ArrayVector<ChannelGroup, MaxGroupsPerAudioBuffer> m_groups;

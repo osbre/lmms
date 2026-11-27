@@ -59,7 +59,7 @@ auto createMask(ch_cnt_t pos) noexcept -> AudioBuffer::ChannelFlags
 
 
 AudioBuffer::AudioBuffer(f_cnt_t frames, ch_cnt_t channels,
-	std::pmr::memory_resource* bufferResource)
+	MemoryResource* bufferResource)
 	: m_sourceBuffer{bufferResource}
 	, m_accessBuffer{bufferResource}
 	, m_interleavedBuffer{bufferResource}
