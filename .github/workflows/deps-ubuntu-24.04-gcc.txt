@@ -26,7 +26,6 @@ librsvg2-bin
 libsamplerate0-dev
 libsdl2-dev
 libsndfile1-dev
-libsoundio-dev
 libstk-dev
 libsuil-dev
 libvorbis-dev

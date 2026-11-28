@@ -79,7 +79,8 @@ public:
 
 	void loadFile( const QString & _file ) override;
 
-	AutomatableModel * childModel( const QString & _modelName ) override;
+	auto midiPatch() const -> std::optional<MidiPatch> override;
+	AutomatableModel* childModel(std::string_view modelName) override;
 
 	QString nodeName() const override;
 
@@ -181,6 +182,8 @@ public:
 
 private:
 	void modelChanged() override;
+	void dragEnterEvent(QDragEnterEvent* dee) override;
+	void dropEvent(QDropEvent* de) override;
 
 	PixmapButton * m_fileDialogButton;
 	PixmapButton * m_patchDialogButton;

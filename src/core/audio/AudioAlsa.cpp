@@ -27,9 +27,10 @@
 
 #ifdef LMMS_HAVE_ALSA
 
-#include "endian_handling.h"
 #include "AudioEngine.h"
 #include "ConfigManager.h"
+#include "LmmsCommonMacros.h"
+#include "endian_handling.h"
 
 namespace lmms
 {
@@ -132,20 +133,6 @@ QString AudioAlsa::probeDevice()
 
 
 
-/**
- * @brief Creates a list of all available devices.
- *
- * Uses the hints API of ALSA to collect all devices. This also includes plug
- * devices. The reason to collect these and not the raw hardware devices
- * (e.g. hw:0,0) is that hardware devices often have a very limited number of
- * supported formats, etc. Plugs on the other hand are software components that
- * map all types of formats and inputs to the hardware and therefore they are
- * much more flexible and more what we want.
- *
- * Further helpful info http://jan.newmarch.name/LinuxSound/Sampled/Alsa/.
- *
- * @return A collection of devices found on the system.
- */
 AudioAlsa::DeviceInfoCollection AudioAlsa::getAvailableDevices()
 {
 	DeviceInfoCollection deviceInfos;
@@ -234,7 +221,7 @@ void AudioAlsa::stopProcessingImpl()
 	stopProcessingThread( this );
 }
 
-void AudioAlsa::run()
+void AudioAlsa::run() noexcept LMMS_NONBLOCKING
 {
 	const auto framesPerAudioBuffer = audioEngine()->framesPerAudioBuffer();
 	auto buf = std::vector<float>(framesPerAudioBuffer * channels());

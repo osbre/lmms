@@ -38,6 +38,7 @@
 #include <QMetaMethod>
 #include <QMoveEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QStyleOption>
 #include <QStyleOptionTitleBar>
@@ -61,14 +62,10 @@ SubWindow::SubWindow(QWidget* parent, Qt::WindowFlags windowFlags)
 	// this should always work, since QMdiSubWindows will not start as maximized
 	m_trackedNormalGeom = normalGeometry();
 
-	// inits the colors
-	m_activeColor = Qt::SolidPattern;
-	m_textShadowColor = Qt::black;
-	m_borderColor = Qt::black;
-
 	// close, maximize, restore, and detach buttons
-	auto createButton = [this](std::string_view iconName, const QString& tooltip) -> QPushButton* {
-		auto button = new QPushButton{embed::getIconPixmap(iconName), QString{}, this};
+	auto createButton = [this](const QString& buttonName, const QString& tooltip) -> QPushButton* {
+		auto button = new QPushButton{this};
+		button->setObjectName(buttonName);
 		button->resize(m_buttonSize);
 		button->setFocusPolicy(Qt::NoFocus);
 		button->setCursor(Qt::ArrowCursor);
@@ -76,16 +73,16 @@ SubWindow::SubWindow(QWidget* parent, Qt::WindowFlags windowFlags)
 		button->setToolTip(tooltip);
 		return button;
 	};
-	m_closeBtn = createButton("close", tr("Close"));
+	m_closeBtn = createButton("btn-close", tr("Close"));
 	connect(m_closeBtn, &QPushButton::clicked, this, &QWidget::close);
 
-	m_maximizeBtn = createButton("maximize", tr("Maximize"));
+	m_maximizeBtn = createButton("btn-maximize", tr("Maximize"));
 	connect(m_maximizeBtn, &QPushButton::clicked, this, &QWidget::showMaximized);
 
-	m_restoreBtn = createButton("restore", tr("Restore"));
+	m_restoreBtn = createButton("btn-restore", tr("Restore"));
 	connect(m_restoreBtn, &QPushButton::clicked, this, &QWidget::showNormal);
 
-	m_detachBtn = createButton("detach", tr("Detach"));
+	m_detachBtn = createButton("btn-detach", tr("Detach"));
 	connect(m_detachBtn, &QPushButton::clicked, this, &SubWindow::detach);
 
 	// QLabel for the window title and the shadow effect
@@ -110,12 +107,6 @@ SubWindow::SubWindow(QWidget* parent, Qt::WindowFlags windowFlags)
 
 
 
-/**
- * @brief SubWindow::paintEvent
- * 
- *  This draws our new title bar with custom colors
- *  and draws a window icon on the left upper corner.
- */
 void SubWindow::paintEvent( QPaintEvent * )
 {
 	// Don't paint any of the other stuff if the sub window is maximized
@@ -123,19 +114,22 @@ void SubWindow::paintEvent( QPaintEvent * )
 	if (isMaximized()) { return; }
 
 	QPainter p( this );
-	QRect rect( 0, 0, width(), m_titleBarHeight );
+	p.setRenderHint(QPainter::Antialiasing);
 
 	const bool isActive = windowState() & Qt::WindowActive;
 
-	p.fillRect( rect, isActive ? activeColor() : p.pen().brush() );
+	//Create the titlebar with 2 overlapping rectangles, with one rounded.
+	QPainterPath path;
+	path.setFillRule(Qt::WindingFill);
+	path.addRoundedRect(QRect(0, 0, width(), 20), m_topRadius, m_topRadius);
+	path.addRect(0, 10, width(), m_titleBarHeight-10);
 
-	// window border
-	p.setPen( borderColor() );
+	p.fillPath(path, isActive ? activeColor() : p.pen().brush());
 
-	// bottom, left, and right lines
-	p.drawLine( 0, height() - 1, width(), height() - 1 );
-	p.drawLine( 0, m_titleBarHeight, 0, height() - 1 );
-	p.drawLine( width() - 1, m_titleBarHeight, width() - 1, height() - 1 );
+	//Border
+	p.fillRect(0, m_titleBarHeight, width(), height() - m_titleBarHeight, borderColor());
+	//Main window body below the titlebar
+	p.fillRect(1, m_titleBarHeight, width() - 2, height() - m_titleBarHeight - 1, m_backgroundColor);
 
 	// window icon
 	if( widget() )
@@ -148,12 +142,6 @@ void SubWindow::paintEvent( QPaintEvent * )
 
 
 
-/**
- * @brief SubWindow::changeEvent
- * 
- * Triggers if the window title changes and calls adjustTitleBar().
- * @param event
- */
 void SubWindow::changeEvent( QEvent *event )
 {
 	QMdiSubWindow::changeEvent( event );
@@ -169,20 +157,16 @@ void SubWindow::changeEvent( QEvent *event )
 
 void SubWindow::setVisible(bool visible)
 {
-	if (isDetached())
+	if (isDetached() || visible)
 	{
 		// When detached, top-level window is the child widget itself. (This is janky and is best changed at some point.)
 		// For that reason we forward show/hide to the child widget, and don't touch the hidden attached window frame.
 		widget()->setVisible(visible);
 	}
-	else
+	if (!isDetached())
 	{
 		// When attached, visibility of the actual window is controlled by SubWindow.
-		// SubWindow::hide() when it's already hidden still causes a size recalculation,
-		// if the child widget is hidden it does not get included into the layout, and maximum size is set to 0x0.
-		// There shouldn't be a reason to keep the child widget hidden when the subwindow is attached.
-		// see bug #8292
-		widget()->show();
+		// Nevertheless, the subwindow contents still need to be visible, which is addressed above.
 		QMdiSubWindow::setVisible(visible);
 	}
 }
@@ -235,16 +219,6 @@ void SubWindow::setDetached(bool on)
 
 
 
-/**
- * @brief SubWindow::elideText
- * 
- *  Stores the given text into the given label.
- *  Shorts the text if it's too big for the labels width
- *  and adds three dots (...)
- * 
- * @param label - holds a pointer to the QLabel
- * @param text  - the text which will be stored (and if needed broken down) into the QLabel.
- */
 void SubWindow::elideText( QLabel *label, QString text )
 {
 	QFontMetrics metrix( label->font() );
@@ -424,15 +398,6 @@ void SubWindow::updateTitleBar()
 }
 
 
-/**
- * @brief SubWindow::moveEvent
- * 
- *  overrides the QMdiSubWindow::moveEvent() for saving the position
- *  of the subwindow into m_trackedNormalGeom. This position
- *  will be saved with the project because of an Qt bug which doesn't
- *  save the right position. look at: https://bugreports.qt.io/browse/QTBUG-256
- * @param event
- */
 void SubWindow::moveEvent( QMoveEvent * event )
 {
 	QMdiSubWindow::moveEvent( event );
@@ -447,14 +412,6 @@ void SubWindow::moveEvent( QMoveEvent * event )
 
 
 
-/**
- * @brief SubWindow::adjustTitleBar
- * 
- *  Our title bar needs buttons for maximize/restore and close in the right upper corner.
- *  We check if the subwindow is maximizable and put the buttons on the right positions.
- *  At next we calculate the width of the title label and call elideText() for adding
- *  the window title to m_windowTitle (which is a QLabel)
- */
 void SubWindow::adjustTitleBar()
 {
 	// Don't show the title or any button if the sub window is maximized. Otherwise they
@@ -566,20 +523,6 @@ void SubWindow::focusChanged( QMdiSubWindow *subWindow )
 
 
 
-/**
- * @brief SubWindow::resizeEvent
- * 
- *  At first we give the event to QMdiSubWindow::resizeEvent() which handles
- *  the event on its behavior.
- *
- *  On every resize event we have to adjust our title label.
- * 
- *  At last we store the current size into m_trackedNormalGeom. This size
- *  will be saved with the project because of an Qt bug which doesn't
- *  save the right size. look at: https://bugreports.qt.io/browse/QTBUG-256
- * 
- * @param event
- */
 void SubWindow::resizeEvent( QResizeEvent * event )
 {
 	// When the parent QMdiArea gets resized, maximized subwindows also gets resized, if any.
@@ -599,15 +542,6 @@ void SubWindow::resizeEvent( QResizeEvent * event )
 
 
 
-/**
- * @brief SubWindow::eventFilter
- *
- * Override of QMdiSubWindow's event filter.
- * This is not how regular eventFilters work, it is never installed explicitly.
- * Instead, it is installed by Qt and conveniently installs itself
- * onto the child widget. Despite relying on internal implementation details,
- * as of writing this it seems to be the best way to do so as soon as the widget is set.
- */
 bool SubWindow::eventFilter(QObject* obj, QEvent* event)
 {
 	if (obj != static_cast<QObject*>(widget()))
@@ -617,10 +551,6 @@ bool SubWindow::eventFilter(QObject* obj, QEvent* event)
 
 	switch (event->type())
 	{
-		case QEvent::WindowStateChange:
-			event->accept();
-			return true;
-
 		case QEvent::Close:
 			if (isDetached())
 			{
@@ -648,6 +578,14 @@ bool SubWindow::eventFilter(QObject* obj, QEvent* event)
 			{
 				hide();
 			}
+			return QMdiSubWindow::eventFilter(obj, event);
+			
+		case QEvent::Hide:
+			layout()->setSizeConstraint(QLayout::SetNoConstraint);
+			return QMdiSubWindow::eventFilter(obj, event);
+
+		case QEvent::Show:
+			layout()->setSizeConstraint(QLayout::SetMinAndMaxSize);
 			return QMdiSubWindow::eventFilter(obj, event);
 
 		default:

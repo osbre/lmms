@@ -106,23 +106,26 @@ const int PR_TOP_MARGIN = 18;
 const int PR_RIGHT_MARGIN = SCROLLBAR_SIZE;
 
 
-//! Width of area used for resizing (the grip at the end of a note)
+//! @brief Width of area used for resizing (the grip at the end of a note)
 constexpr int RESIZE_GRIP_WIDTH = 9;
-//! The maximum fraction of the note width that the resize grip is allowed to take up
+
+//! @brief The maximum fraction of the note width that the resize grip is allowed to take up
 constexpr float RESIZE_GRIP_MAX_WIDTH_FRACTION = 0.25f;
 
-// width of line for setting volume/panning of note
-const int NOTE_EDIT_LINE_WIDTH = 3;
+//! @brief Width of line for setting volume/panning of note
+constexpr int NOTE_EDIT_LINE_WIDTH = 3;
 
-// key where to start
-const int INITIAL_START_KEY = Octave::Octave_4 + Key::C;
+//! @brief Key where to start
+constexpr int INITIAL_START_KEY = Octave::Octave_4 + Key::C;
 
-// number of each note to provide in quantization and note lengths
-const int NUM_EVEN_LENGTHS = 6;
-const int NUM_TRIPLET_LENGTHS = 5;
+//! @brief Number of each note to provide in quantization and note lengths
+constexpr int NUM_EVEN_LENGTHS = 6;
 
-// Radius of the automation node circles which appear when pitchbending a note
-const int DETUNING_HANDLE_RADIUS = 3;
+//! @brief Number of each note to provide in quantization and note lengths
+constexpr int NUM_TRIPLET_LENGTHS = 5;
+
+//! @brief Radius of the automation node circles which appear when pitchbending a note
+constexpr int DETUNING_HANDLE_RADIUS = 3;
 
 SimpleTextFloat * PianoRoll::s_textFloat = nullptr;
 
@@ -333,7 +336,7 @@ PianoRoll::PianoRoll() :
 	{
 		m_zoomingYModel.addItem(QString("%1%").arg(zoomLevel * 100));
 	}
-	m_zoomingYModel.setInitValue(ConfigManager::inst()->value("ui", "pianorollzoomvertical", QString::number(m_zoomingModel.findText("100%"))).toInt());
+	m_zoomingYModel.setInitValue(ConfigManager::inst()->value("ui", "pianorollzoomvertical", QString::number(m_zoomingYModel.findText("100%"))).toInt());
 	zoomingYChanged();
 	connect(&m_zoomingYModel, SIGNAL(dataChanged()),
 					this, SLOT(zoomingYChanged()));
@@ -343,7 +346,7 @@ PianoRoll::PianoRoll() :
 	for (auto q : Quantizations) {
 		m_quantizeModel.addItem(QString("1/%1").arg(q));
 	}
-	m_quantizeModel.setInitValue(ConfigManager::inst()->value("ui", "pianorollquantization", QString::number(m_zoomingModel.findText("1/16"))).toInt());
+	m_quantizeModel.setInitValue(ConfigManager::inst()->value("ui", "pianorollquantization", QString::number(m_quantizeModel.findText("1/16"))).toInt());
 
 	connect( &m_quantizeModel, SIGNAL(dataChanged()),
 					this, SLOT(quantizeChanged()));
@@ -351,6 +354,10 @@ PianoRoll::PianoRoll() :
 	// Set up note length model
 	m_noteLenModel.addItem( tr( "Last note" ),
 					std::make_unique<PixmapLoader>( "edit_draw" ) );
+
+	m_noteLenModel.addItem(tr("Draw (Shift+Click)"),
+					std::make_unique<PixmapLoader>("edit_draw"));
+
 	const auto pixmaps = std::array<std::string, 11>{"whole", "half", "quarter", "eighth",
 						"sixteenth", "thirtysecond", "triplethalf",
 						"tripletquarter", "tripleteighth",
@@ -526,10 +533,9 @@ void PianoRoll::markSemiTone(SemiToneMarkerAction i, bool fromMenu)
 			break;
 		case SemiToneMarkerAction::MarkCurrentSemiTone:
 		{
-			QList<int>::iterator it = std::find( m_markedSemiTones.begin(), m_markedSemiTones.end(), key );
-			if( it != m_markedSemiTones.end() )
+			if (auto it = std::ranges::find(m_markedSemiTones, key); it != m_markedSemiTones.end())
 			{
-				m_markedSemiTones.erase( it );
+				m_markedSemiTones.erase(it);
 			}
 			else
 			{
@@ -544,11 +550,9 @@ void PianoRoll::markSemiTone(SemiToneMarkerAction i, bool fromMenu)
 			if ( m_markedSemiTones.contains(key) )
 			{
 				// lets erase all of the ones that match this by octave
-				QList<int>::iterator i;
 				for (int octave : aok)
 				{
-					i = std::find(m_markedSemiTones.begin(), m_markedSemiTones.end(), octave);
-					if (i != m_markedSemiTones.end())
+					if (auto i = std::ranges::find(m_markedSemiTones, octave); i != m_markedSemiTones.end())
 					{
 						m_markedSemiTones.erase(i);
 					}
@@ -669,8 +673,8 @@ void PianoRoll::glueNotes()
 		m_midiClip->addJournalCheckPoint();
 
 		// Sort notes on key and then pos.
-		std::sort(selectedNotes.begin(), selectedNotes.end(),
-			[](const Note * note, const Note * compareNote) -> bool
+		std::ranges::sort(selectedNotes,
+			[](const Note* note, const Note* compareNote)
 			{
 				if (note->key() == compareNote->key())
 				{
@@ -734,11 +738,11 @@ void PianoRoll::fitNoteLengths(bool fill)
 	}
 	else if (!fill)
 	{
-		std::sort(notes.begin(), notes.end(), Note::lessThan);
+		std::ranges::sort(notes, Note::lessThan);
 	}
 	if (fill)
 	{
-		std::sort(notes.begin(), notes.end(), [](Note* n1, Note* n2) { return n1->endPos() < n2->endPos(); });
+		std::ranges::sort(notes, {}, [](Note* n) { return n->endPos(); });
 	}
 
 	int length;
@@ -1846,13 +1850,25 @@ void PianoRoll::mousePressEvent(QMouseEvent * me )
 					// the mouse.  We do this here instead of in note.quantized
 					// because live notes should still be quantized at the half.
 					TimePos note_pos( pos_ticks - ( quantization() / 2 ) );
-					TimePos note_len( newNoteLen() );
+
+					bool drawingNote = false;
+					if ((me->modifiers() & Qt::ShiftModifier) || (newNoteLen() == -1))
+					{
+						// Draw note instead of placing
+						drawingNote = true;
+					}
+
+					TimePos note_len = drawingNote ? TimePos(0, quantization()) : newNoteLen();
+
+					m_minResizeLen = 1;
 
 					Note new_note( note_len, note_pos, key_num );
 					new_note.setSelected( true );
 					new_note.setPanning( m_lastNotePanning );
 					new_note.setVolume( m_lastNoteVolume );
 					created_new_note = m_midiClip->addNote( new_note );
+
+					if (drawingNote) { m_drawingNewNote = created_new_note; }
 
 					const InstrumentFunctionNoteStacking::Chord & chord = InstrumentFunctionNoteStacking::ChordTable::getInstance()
 						.getChordByName( m_chordModel.currentText() );
@@ -1960,8 +1976,8 @@ void PianoRoll::mousePressEvent(QMouseEvent * me )
 						m_midiClip->addJournalCheckPoint();
 					}
 
-					// otherwise move it
-					m_action = Action::MoveNote;
+					// Otherwise : If note is being drawn resize it ; Else move it
+					m_action = m_drawingNewNote ? Action::ResizeNote : Action::MoveNote;
 
 					// set move-cursor
 					setCursor( Qt::SizeAllCursor );
@@ -2364,6 +2380,8 @@ void PianoRoll::computeSelectedNotes(bool shift)
 
 void PianoRoll::mouseReleaseEvent( QMouseEvent * me )
 {
+	m_drawingNewNote = nullptr; // Stop drawing new note if doing so
+
 	bool mustRepaint = false;
 
 	s_textFloat->hide();
@@ -2979,7 +2997,7 @@ void PianoRoll::setupSelectedChords()
 		if (note->pos() >= maxTime && maxTime != -1)
 		{
 			// Sort the notes by key before adding the chord to the vector
-			std::sort(currentChord.begin(), currentChord.end(), [](Note* a, Note* b){ return a->key() < b->key(); });
+			std::ranges::sort(currentChord, {}, &Note::key);
 			m_selectedChords.push_back(currentChord);
 			currentChord.clear();
 			maxTime = note->endPos();
@@ -3032,7 +3050,7 @@ void PianoRoll::updateStrumPos(QMouseEvent* me, bool initial, bool warp)
 				// if this is the clicked note, calculate it's ratio up the chord
 				if (note == clickedNote && chord.size() > 1)
 				{
-					m_strumHeightRatio = 1.f * std::distance(chord.begin(), std::find(chord.begin(), chord.end(), clickedNote)) / (chord.size() - 1);
+					m_strumHeightRatio = 1.f * std::distance(chord.begin(), std::ranges::find(chord, clickedNote)) / (chord.size() - 1);
 				}
 			}
 		}
@@ -3182,9 +3200,10 @@ void PianoRoll::dragNotes(int x, int y, bool alt, bool shift, bool ctrl)
 			off_ticks = floor(off_ticks / quantization()) * quantization();
 		}
 
-		auto selectedNotes = getSelectedNotes();
+		auto selectedNotes = m_drawingNewNote ? std::vector({m_drawingNewNote}) : getSelectedNotes();
 
-		if (shift)
+		// Only apply shifting algorithm if a note isn't currently being drawn (which requires shift to be held)
+		if (shift && !m_drawingNewNote)
 		{
 			// Algorithm:
 			// Relative to the starting point of the left-most selected note,
@@ -3251,7 +3270,7 @@ void PianoRoll::dragNotes(int x, int y, bool alt, bool shift, bool ctrl)
 
 				m_lenOfNewNotes = note->length();
 			}
-			if (ctrl || selectionCount() == 1)
+			if (ctrl || (selectionCount() == 1))
 			{
 				// if holding ctrl or only one note is selected, reposition posterior notes
 				for (Note *note : notes)
@@ -3266,7 +3285,7 @@ void PianoRoll::dragNotes(int x, int y, bool alt, bool shift, bool ctrl)
 		}
 		else
 		{
-			// shift is not pressed; stretch length of selected notes but not their position
+			// shift is not pressed (or note is being drawn); stretch length of selected notes but not their position
 			int minLength = alt ? 1 : m_minResizeLen.getTicks();
 
 			if (m_gridMode == GridMode::Snap)
@@ -4116,11 +4135,8 @@ void PianoRoll::wheelEvent(QWheelEvent * we )
 					volume_t vol = qBound<int>( MinVolume, n->getVolume() + step, MaxVolume );
 					n->setVolume( vol );
 				}
-				bool allVolumesEqual = std::all_of( nv.begin(), nv.end(),
-					[nv](const Note *note)
-					{
-						return note->getVolume() == nv[0]->getVolume();
-					});
+				const bool allVolumesEqual = std::ranges::all_of(nv,
+					[nv](const Note* note) { return note->getVolume() == nv[0]->getVolume(); });
 				if ( allVolumesEqual )
 				{
 					// show the volume hover-text only if all notes have the
@@ -4137,11 +4153,8 @@ void PianoRoll::wheelEvent(QWheelEvent * we )
 					panning_t pan = qBound(PanningLeft, static_cast<panning_t>(n->getPanning() + step), PanningRight);
 					n->setPanning(pan);
 				}
-				bool allPansEqual = std::all_of( nv.begin(), nv.end(),
-					[nv](const Note *note)
-					{
-						return note->getPanning() == nv[0]->getPanning();
-					});
+				const bool allPansEqual = std::ranges::all_of(nv,
+					[nv](const Note* note) { return note->getPanning() == nv[0]->getPanning(); });
 				if ( allPansEqual )
 				{
 					// show the pan hover-text only if all notes have the same
@@ -5064,6 +5077,10 @@ TimePos PianoRoll::newNoteLen() const
 	if( m_noteLenModel.value() == 0 )
 	{
 		return m_lenOfNewNotes;
+	}
+	else if (m_noteLenModel.value() == 1)
+	{
+		return -1;
 	}
 
 	QString text = m_noteLenModel.currentText();

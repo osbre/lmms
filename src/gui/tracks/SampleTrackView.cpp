@@ -32,6 +32,7 @@
 
 #include "ConfigManager.h"
 #include "DeprecationHelper.h"
+#include "MainWindow.h"
 #include "embed.h"
 #include "Engine.h"
 #include "FadeButton.h"
@@ -65,7 +66,10 @@ SampleTrackView::SampleTrackView( SampleTrack * _t, TrackContainerView* tcv ) :
 	m_tlb->show();
 
 	m_mixerChannelNumber = new MixerChannelLcdSpinBox(2, getTrackSettingsWidget(), tr("Mixer channel"), this);
-	m_mixerChannelNumber->show();
+	m_mixerChannelNumber->setVisible(trackContainerView()->trackHeadWidth() >= COMPACT_TRACK_WIDTH);
+	connect(trackContainerView(), &TrackContainerView::trackHeadWidthChanged, this, [this](int width) {
+		m_mixerChannelNumber->setVisible(trackContainerView()->trackHeadWidth() >= COMPACT_TRACK_WIDTH);
+	});
 
 	m_volumeKnob = new VolumeKnob(KnobType::Small17, tr("VOL"), getTrackSettingsWidget(), Knob::LabelRendering::LegacyFixedFontSize, tr("Track volume"));
 	m_volumeKnob->setModel( &_t->m_volumeModel );
@@ -77,12 +81,7 @@ SampleTrackView::SampleTrackView( SampleTrack * _t, TrackContainerView* tcv ) :
 	m_panningKnob->setHintText( tr( "Panning:" ), "%" );
 	m_panningKnob->show();
 
-	m_activityIndicator = new FadeButton(
-		QApplication::palette().color(QPalette::Active, QPalette::Window),
-		QApplication::palette().color(QPalette::Active, QPalette::BrightText),
-		QApplication::palette().color(QPalette::Active, QPalette::BrightText).darker(),
-		getTrackSettingsWidget()
-	);
+	m_activityIndicator = new FadeButton(getTrackSettingsWidget());
 	m_activityIndicator->setFixedSize(8, 28);
 	m_activityIndicator->show();
 
@@ -90,16 +89,18 @@ SampleTrackView::SampleTrackView( SampleTrack * _t, TrackContainerView* tcv ) :
 	masterLayout->setContentsMargins(0, 1, 0, 0);
 	auto layout = new QHBoxLayout();
 	layout->setContentsMargins(0, 0, 0, 0);
-	layout->setSpacing(0);
+	layout->setSpacing(3);
 	layout->addWidget(m_tlb);
 	layout->addWidget(m_mixerChannelNumber);
 	layout->addWidget(m_activityIndicator);
 	layout->addWidget(m_volumeKnob);
 	layout->addWidget(m_panningKnob);
+	layout->addSpacing(4);
 	masterLayout->addLayout(layout);
 	masterLayout->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Minimum, QSizePolicy::Expanding));
 
 	connect(_t, SIGNAL(playingChanged()), this, SLOT(updateIndicator()));
+	connect(getGUI()->mainWindow(), &MainWindow::periodicUpdate, this, &SampleTrackView::corruptStateUpdate);
 
 	setModel( _t );
 
@@ -203,9 +204,7 @@ void SampleTrackView::dropEvent(QDropEvent *de)
 
 	if (type == "samplefile")
 	{
-		int trackHeadWidth = ConfigManager::inst()->value("ui", "compacttrackbuttons").toInt()==1
-				? DEFAULT_SETTINGS_WIDGET_WIDTH_COMPACT + TRACK_OP_WIDTH_COMPACT
-				: DEFAULT_SETTINGS_WIDGET_WIDTH + TRACK_OP_WIDTH;
+		int trackHeadWidth = trackContainerView()->trackHeadWidth();
 
 		const int deX = position(de).x();
 		int xPos = deX < trackHeadWidth
@@ -227,7 +226,6 @@ void SampleTrackView::dropEvent(QDropEvent *de)
 
 
 
-/*! \brief Create and assign a new mixer Channel for this track */
 void SampleTrackView::createMixerLine()
 {
 	int channelIndex = getGUI()->mixerView()->addNewChannel();
@@ -242,12 +240,25 @@ void SampleTrackView::createMixerLine()
 
 
 
-/*! \brief Assign a specific mixer Channel for this track */
 void SampleTrackView::assignMixerLine(int channelIndex)
 {
 	model()->mixerChannelModel()->setValue(channelIndex);
 
 	getGUI()->mixerView()->setCurrentMixerChannel(channelIndex);
+}
+
+void SampleTrackView::corruptStateUpdate()
+{
+	if (model()->audioBusHandle()->isCorrupted())
+	{
+		m_activityIndicator->setState(FadeButton::State::Corrupted);
+		m_activityIndicator->setToolTip(tr("Corrupted audio detected: muting affected channels"));
+	}
+	else
+	{
+		m_activityIndicator->setState(FadeButton::State::Normal);
+		m_activityIndicator->setToolTip(QString{});
+	}
 }
 
 

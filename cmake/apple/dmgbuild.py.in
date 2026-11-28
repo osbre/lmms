@@ -1,0 +1,9 @@
+window_rect = ((100, 100), (700, 400))
+background = "@DMG_BACKGROUND@"
+icon_size = 128
+files = [ "@CPACK_TEMPORARY_INSTALL_DIRECTORY@/@APP_NAME@.app" ]
+symlinks = { 'Applications': '/Applications' }
+icon_locations = {
+    "@APP_NAME@.app": (139, 200),
+    'Applications': (568, 200)
+}

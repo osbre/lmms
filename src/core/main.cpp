@@ -671,10 +671,6 @@ int main( int argc, char * * argv )
 
 	ConfigManager::inst()->loadConfigFile(configFile);
 
-	// Hidden settings
-	MixHelpers::setNaNHandler( ConfigManager::inst()->value( "app",
-						"nanhandler", "1" ).toInt() );
-
 	// set language
 	QString pos = ConfigManager::inst()->value( "app", "language" );
 	if( pos.isEmpty() )
@@ -855,9 +851,9 @@ int main( int argc, char * * argv )
 			getGUI()->mainWindow()->showMaximized();
 		}
 
-		// Handle macOS-style FileOpen QEvents
+		// Handle macOS-style FileOpen QEvents, unless the user chose to recover
 		QString queuedFile = static_cast<MainApplication *>( app )->queuedFile();
-		if ( !queuedFile.isEmpty() ) {
+		if (!queuedFile.isEmpty() && fileToLoad != recoveryFile) {
 			fileToLoad = queuedFile;
 		}
 
